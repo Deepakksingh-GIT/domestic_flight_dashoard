@@ -155,20 +155,44 @@ else:
 # INSIGHTS SECTION
 # ==============================
 
+# ==============================
+# INSIGHTS SECTION (SAFE VERSION)
+# ==============================
+
 st.markdown("---")
 st.subheader("📈 Automated Insights")
 
+# Airline performance insight
 if airline_col and arr_delay_col:
-    performance = df.groupby(airline_col)[arr_delay_col].mean()
-    st.success(f"🏆 Best On-Time Airline: {performance.idxmin()}")
-    st.error(f"⚠️ Worst Performing Airline: {performance.idxmax()}")
 
+    valid_data = df[[airline_col, arr_delay_col]].dropna()
+
+    if not valid_data.empty:
+        performance = valid_data.groupby(airline_col)[arr_delay_col].mean()
+
+        if not performance.empty:
+            best_airline = performance.idxmin()
+            worst_airline = performance.idxmax()
+
+            st.success(f"🏆 Best On-Time Airline: {best_airline}")
+            st.error(f"⚠️ Worst Performing Airline: {worst_airline}")
+        else:
+            st.warning("Not enough delay data for airline comparison.")
+    else:
+        st.warning("Arrival delay data is missing.")
+
+# Busiest airport insight
 if origin_col:
-    busiest_airport = df[origin_col].value_counts().idxmax()
-    st.info(f"✈️ Busiest Airport: {busiest_airport}")
+    airport_counts = df[origin_col].dropna()
 
+    if not airport_counts.empty:
+        busiest_airport = airport_counts.value_counts().idxmax()
+        st.info(f"✈️ Busiest Airport: {busiest_airport}")
+
+# On-time performance
 if arr_delay_col:
-    on_time = (df[arr_delay_col] <= 0).mean() * 100
-    st.write(f"🕒 On-Time Arrival Rate: {round(on_time,2)}%")
+    valid_arr = df[arr_delay_col].dropna()
 
-st.markdown("Built with ❤️ using Streamlit")
+    if not valid_arr.empty:
+        on_time = (valid_arr <= 0).mean() * 100
+        st.write(f"🕒 On-Time Arrival Rate: {round(on_time, 2)}%")
