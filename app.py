@@ -2,8 +2,12 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-st.set_page_config(page_title="Flight Dashboard", layout="wide")
-st.title("✈️ Flight Performance Analytics")
+st.set_page_config(page_title="Flight Analytics Dashboard", layout="wide")
+st.title("✈️ Domestic Flight Performance Dashboard")
+
+# ==============================
+# LOAD DATA
+# ==============================
 
 @st.cache_data
 def load_data():
@@ -13,18 +17,14 @@ def load_data():
 
 df = load_data()
 
-# Show columns for debugging
-st.sidebar.write("Detected Columns:")
-st.sidebar.write(df.columns.tolist())
-
-# ------------------------------------
+# ==============================
 # SMART COLUMN DETECTION
-# ------------------------------------
+# ==============================
 
-def find_column(keyword_list):
+def find_column(keywords):
     for col in df.columns:
-        for keyword in keyword_list:
-            if keyword in col:
+        for word in keywords:
+            if word in col:
                 return col
     return None
 
@@ -35,57 +35,80 @@ origin_col = find_column(["origin"])
 month_col = find_column(["month"])
 cancel_col = find_column(["cancel"])
 
-# ------------------------------------
-# FILTER
-# ------------------------------------
+# ==============================
+# CLEAN NUMERIC COLUMNS SAFELY
+# ==============================
+
+def clean_numeric(column):
+    if column:
+        df[column] = pd.to_numeric(df[column], errors="coerce")
+
+clean_numeric(arr_delay_col)
+clean_numeric(dep_delay_col)
+clean_numeric(cancel_col)
+
+# ==============================
+# SIDEBAR FILTER
+# ==============================
+
+st.sidebar.header("Filter Options")
 
 if airline_col:
     airlines = st.sidebar.multiselect(
         "Select Airline",
-        df[airline_col].dropna().unique(),
-        default=df[airline_col].dropna().unique(),
+        sorted(df[airline_col].dropna().unique()),
+        default=sorted(df[airline_col].dropna().unique()),
     )
     df = df[df[airline_col].isin(airlines)]
 
-# ------------------------------------
+# ==============================
 # KPI SECTION
-# ------------------------------------
+# ==============================
 
-st.subheader("📌 Key Metrics")
+st.subheader("📌 Key Performance Indicators")
 
 col1, col2, col3, col4 = st.columns(4)
 
-col1.metric("Total Flights", len(df))
+col1.metric("Total Flights", f"{len(df):,}")
 
 if dep_delay_col:
-    col2.metric("Avg Departure Delay", round(df[dep_delay_col].mean(), 2))
+    col2.metric(
+        "Avg Departure Delay (min)",
+        round(df[dep_delay_col].mean(skipna=True), 2),
+    )
 
 if arr_delay_col:
-    col3.metric("Avg Arrival Delay", round(df[arr_delay_col].mean(), 2))
+    col3.metric(
+        "Avg Arrival Delay (min)",
+        round(df[arr_delay_col].mean(skipna=True), 2),
+    )
 
 if cancel_col:
-    col4.metric("Cancellation Rate (%)", round(df[cancel_col].mean() * 100, 2))
+    col4.metric(
+        "Cancellation Rate (%)",
+        round(df[cancel_col].mean(skipna=True) * 100, 2),
+    )
 
 st.markdown("---")
 
-# ------------------------------------
+# ==============================
 # GRAPH OPTIONS
-# ------------------------------------
+# ==============================
 
-st.subheader("📊 Visualizations")
+st.subheader("📊 Visual Analysis")
 
 option = st.selectbox(
     "Choose Analysis",
     [
         "Airline Delay Comparison",
-        "Monthly Trend",
-        "Busiest Airports",
+        "Monthly Delay Trend",
+        "Top 10 Busiest Airports",
         "Delay Distribution",
         "Departure vs Arrival Delay",
     ],
 )
 
-# Airline Delay
+# Airline Delay Comparison
 if option == "Airline Delay Comparison" and airline_col and arr_delay_col:
     data = df.groupby(airline_col)[arr_delay_col].mean().reset_index()
     fig = px.bar(data, x=airline_col, y=arr_delay_col,
@@ -93,7 +116,7 @@ if option == "Airline Delay Comparison" and airline_col and arr_delay_col:
     st.plotly_chart(fig, use_container_width=True)
 
 # Monthly Trend
-elif option == "Monthly Trend" and month_col and arr_delay_col:
+elif option == "Monthly Delay Trend" and month_col and arr_delay_col:
     data = df.groupby(month_col)[arr_delay_col].mean().reset_index()
     fig = px.line(data, x=month_col, y=arr_delay_col,
                   markers=True,
@@ -101,7 +124,7 @@ elif option == "Monthly Trend" and month_col and arr_delay_col:
     st.plotly_chart(fig, use_container_width=True)
 
 # Busiest Airports
-elif option == "Busiest Airports" and origin_col:
+elif option == "Top 10 Busiest Airports" and origin_col:
     busiest = df[origin_col].value_counts().head(10).reset_index()
     busiest.columns = ["Airport", "Flights"]
     fig = px.bar(busiest, x="Airport", y="Flights",
@@ -115,34 +138,37 @@ elif option == "Delay Distribution" and arr_delay_col:
                        nbins=50)
     st.plotly_chart(fig, use_container_width=True)
 
-# Scatter
+# Scatter Plot
 elif option == "Departure vs Arrival Delay" and arr_delay_col and dep_delay_col:
     sample = df.sample(min(2000, len(df)))
-    fig = px.scatter(sample, x=dep_delay_col, y=arr_delay_col,
-                     title="Departure vs Arrival Delay",
-                     opacity=0.5)
+    fig = px.scatter(sample,
+                     x=dep_delay_col,
+                     y=arr_delay_col,
+                     opacity=0.5,
+                     title="Departure vs Arrival Delay")
     st.plotly_chart(fig, use_container_width=True)
 
 else:
-    st.error("Some required columns are missing in this dataset.")
+    st.warning("Some required columns are missing for this analysis.")
 
-# ------------------------------------
-# INSIGHTS
-# ------------------------------------
+# ==============================
+# INSIGHTS SECTION
+# ==============================
 
 st.markdown("---")
-st.subheader("📈 Insights")
+st.subheader("📈 Automated Insights")
 
 if airline_col and arr_delay_col:
-    worst = df.groupby(airline_col)[arr_delay_col].mean().idxmax()
-    best = df.groupby(airline_col)[arr_delay_col].mean().idxmin()
-    st.success(f"Best On-Time Airline: {best}")
-    st.error(f"Worst Performing Airline: {worst}")
+    performance = df.groupby(airline_col)[arr_delay_col].mean()
+    st.success(f"🏆 Best On-Time Airline: {performance.idxmin()}")
+    st.error(f"⚠️ Worst Performing Airline: {performance.idxmax()}")
 
 if origin_col:
     busiest_airport = df[origin_col].value_counts().idxmax()
-    st.info(f"Busiest Airport: {busiest_airport}")
+    st.info(f"✈️ Busiest Airport: {busiest_airport}")
 
 if arr_delay_col:
     on_time = (df[arr_delay_col] <= 0).mean() * 100
-    st.write(f"On-Time Arrival Rate: {round(on_time,2)}%")
+    st.write(f"🕒 On-Time Arrival Rate: {round(on_time,2)}%")
+
+st.markdown("Built with ❤️ using Streamlit")
